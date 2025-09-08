@@ -17,8 +17,13 @@ app = FastAPI(
     openapi_tags=openapi_tags,
 )
 
-# CORS configuration using environment variable or default to '*'
-allowed_origins: List[str] = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")] if os.getenv("CORS_ALLOW_ORIGINS") else ["*"]
+# CORS configuration using environment variable or default to known dev preview origin.
+# If CORS_ALLOW_ORIGINS is not set, explicitly list the common React dev URL to allow credentialed requests.
+_default_dev_origin = "https://vscode-internal-18322-qa.qa01.cloud.kavia.ai:3000"
+if os.getenv("CORS_ALLOW_ORIGINS"):
+    allowed_origins: List[str] = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+else:
+    allowed_origins = [_default_dev_origin]
 
 app.add_middleware(
     CORSMiddleware,
