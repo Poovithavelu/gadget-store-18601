@@ -10,12 +10,16 @@ class Settings(BaseSettings):
     Application settings loaded from environment variables.
 
     Note: Do not store secrets in code. Provide them via environment variables.
+    Includes CORS, JWT, and MySQL connection settings. For database connectivity,
+    set MYSQL_URL or provide individual MYSQL_* variables. In local/dev without a DB,
+    code paths should still allow the API to start; however database usage will fail
+    until proper credentials are provided.
     """
 
     # FastAPI/general
     ENV: str = Field(default="development", description="Environment name")
     DEBUG: bool = Field(default=True, description="Enable debug mode")
-    CORS_ALLOW_ORIGINS: str = Field(default="*", description="Comma separated list of allowed origins")
+    CORS_ALLOW_ORIGINS: str = Field(default="*", description="Comma separated list of allowed origins (e.g. https://localhost:3000,http://127.0.0.1:3000)")
 
     # Security / JWT
     JWT_SECRET_KEY: str = Field(default="CHANGE_ME_SECRET", description="JWT secret key (set in .env)")
