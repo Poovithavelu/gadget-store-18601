@@ -17,22 +17,38 @@ app = FastAPI(
     openapi_tags=openapi_tags,
 )
 
-# CORS configuration using environment variable or default to known dev preview origin.
-# If CORS_ALLOW_ORIGINS is not set, explicitly list the common React dev URL to allow credentialed requests.
-_default_dev_origin = "https://vscode-internal-18322-qa.qa01.cloud.kavia.ai:3000"
-if os.getenv("CORS_ALLOW_ORIGINS"):
-    allowed_origins: List[str] = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+# CORS configuration
+# Reads CORS_ALLOW_ORIGINS from env as a comma-separated list. Supports "*" to allow all origins (non-credentialed).
+# If not specified, we default to common React dev origins and the known preview origin to avoid "failed to fetch" during signup.
+_default_dev_origins: List[str] = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://0.0.0.0:3000",
+    "https://vscode-internal-18322-qa.qa01.cloud.kavia.ai:3000",
+]
+env_cors = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
+if env_cors:
+    env_list = [o.strip() for o in env_cors.split(",") if o.strip()]
+    wildcard = any(o == "*" for o in env_list)
+    if wildcard:
+        # With wildcard, browsers disallow credentials. We disable credentials in this mode.
+        allowed_origins: List[str] = ["*"]
+        allow_credentials = False
+    else:
+        allowed_origins = env_list
+        allow_credentials = True
 else:
-    allowed_origins = [_default_dev_origin]
+    # Sensible defaults for dev to prevent CORS issues between frontend (3000) and backend (3001)
+    allowed_origins = _default_dev_origins
+    allow_credentials = True
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 @app.on_event("startup")
 async def on_startup() -> None:
@@ -56,6 +72,22 @@ def health_check():
     """
     return {"message": "Healthy"}
 
+# PUBLIC_INTERFACE
+@app.get(
+    "/_cors_info",
+    summary="CORS Info",
+    description="Debug endpoint that returns the current CORS configuration.",
+    tags=["System"],
+)
+def cors_info():
+    """
+    Returns the current CORS settings. Useful for debugging 'failed to fetch' issues.
+    """
+    return {
+        "allow_origins": allowed_origins,
+        "allow_credentials": allow_credentials,
+        "note": "Set CORS_ALLOW_ORIGINS env (comma-separated) to override. Use '*' to allow all (credentials disabled).",
+    }
 
 # Register routers
 app.include_router(auth.router, prefix="/auth")
