@@ -12,15 +12,65 @@ class Base(DeclarativeBase):
     pass
 
 
-# Create engine and session factory
-engine = create_async_engine(settings.sqlalchemy_database_uri(), echo=settings.DEBUG, pool_pre_ping=True)
-AsyncSessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+# Lazy engine/session initialization to avoid import-time failures impacting OpenAPI generation
+_engine = None  # type: Optional[object]
+_SessionLocal = None  # type: Optional[async_sessionmaker[AsyncSession]]
+
+
+def _ensure_engine_and_session() -> None:
+    """
+    Ensure the async engine and session factory are created.
+
+    This avoids importing the DB dialect and creating an engine at module import time,
+    which can cause /openapi.json to fail if the driver isn't available/configured.
+    """
+    global _engine, _SessionLocal
+    if _engine is None:
+        try:
+            _engine = create_async_engine(
+                settings.sqlalchemy_database_uri(),
+                echo=settings.DEBUG,
+                pool_pre_ping=True,
+            )
+            _SessionLocal = async_sessionmaker(bind=_engine, expire_on_commit=False, class_=AsyncSession)
+        except Exception as exc:
+            # Do not raise during schema generation; defer errors until actual DB access.
+            # Log a clear warning and leave _engine/_SessionLocal as None.
+            print(f"[db][warning] Failed to create async engine lazily: {exc}")
+            _engine = None
+            _SessionLocal = None
+
+
+def get_engine():
+    """
+    Get or create the async SQLAlchemy engine.
+
+    Returns:
+        The async engine instance (or None if initialization failed).
+    """
+    _ensure_engine_and_session()
+    return _engine
+
+
+def get_session_factory():
+    """
+    Get or create the async sessionmaker.
+
+    Returns:
+        async_sessionmaker[AsyncSession] | None
+    """
+    _ensure_engine_and_session()
+    return _SessionLocal
 
 
 # PUBLIC_INTERFACE
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency to provide an async database session."""
-    async with AsyncSessionLocal() as session:
+    session_factory = get_session_factory()
+    if session_factory is None:
+        # Surface a clear runtime error when a route actually needs the DB.
+        raise RuntimeError("Database is not initialized. Check database driver and configuration.")
+    async with session_factory() as session:
         yield session
 
 
@@ -36,6 +86,11 @@ async def init_db() -> None:
     from src.models.user import User  # noqa: F401
     from src.models.product import Product  # noqa: F401
     from src.models.order import Order, OrderItem  # noqa: F401
+
+    engine = get_engine()
+    if engine is None:
+        print("[startup][warning] Database engine not available; skipping init_db table creation.")
+        return
 
     try:
         async with engine.begin() as conn:

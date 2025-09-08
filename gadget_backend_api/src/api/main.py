@@ -62,3 +62,27 @@ app.include_router(auth.router, prefix="/auth")
 app.include_router(products.router, prefix="/products")
 app.include_router(users.router, prefix="/users")
 app.include_router(orders.router, prefix="/orders")
+
+
+# Make OpenAPI generation resilient; if something goes wrong, do not 500.
+def custom_openapi():
+    """
+    Generate OpenAPI schema; if generation fails, return a minimal schema to avoid 500 on /openapi.json.
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+    try:
+        app.openapi_schema = app.openapi()
+        return app.openapi_schema
+    except Exception as exc:
+        # Fallback minimal schema to ensure docs endpoint doesn't 500.
+        print(f"[openapi][warning] Failed to generate OpenAPI schema: {exc}")
+        return {
+            "openapi": "3.1.0",
+            "info": {"title": app.title, "version": app.version, "description": "Fallback schema due to generation error"},
+            "paths": {},
+        }
+
+
+# Assign the custom generator
+app.openapi = custom_openapi  # type: ignore
