@@ -15,4 +15,14 @@ Environment variables (configure in .env; do not commit real secrets):
 - JWT_SECRET_KEY: required for secure auth
 - MYSQL_URL or MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB
 
-Note: In environments without a running MySQL, the app will still start but first DB access will attempt to connect.
+See .env.example for a sample configuration.
+
+Notes on frontend "Failed to fetch":
+- Ensure CORS allows your frontend origin. You can verify with GET /_cors_info.
+- Ensure the backend is reachable at the URL the frontend uses (e.g., http://localhost:3001 or the provided preview URL).
+- If the database is not available, GET /products now returns 503 with a friendly JSON payload instead of 500. Frontends should display the message rather than reporting a network error.
+
+Debug endpoints:
+- GET /              Health check
+- GET /_cors_info    Current CORS settings
+- GET /api-info      API name/version and CORS summary
