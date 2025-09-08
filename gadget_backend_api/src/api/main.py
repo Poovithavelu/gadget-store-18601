@@ -65,14 +65,23 @@ app.include_router(orders.router, prefix="/orders")
 
 
 # Make OpenAPI generation resilient; if something goes wrong, do not 500.
+from fastapi.openapi.utils import get_openapi
+
 def custom_openapi():
     """
-    Generate OpenAPI schema; if generation fails, return a minimal schema to avoid 500 on /openapi.json.
+    Generate OpenAPI schema safely using FastAPI's get_openapi to avoid recursion.
+    On error, return a minimal fallback schema so /openapi.json does not 500.
     """
-    if app.openapi_schema:
+    if getattr(app, "openapi_schema", None):
         return app.openapi_schema
     try:
-        app.openapi_schema = app.openapi()
+        app.openapi_schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+            tags=openapi_tags,
+        )
         return app.openapi_schema
     except Exception as exc:
         # Fallback minimal schema to ensure docs endpoint doesn't 500.
@@ -82,7 +91,6 @@ def custom_openapi():
             "info": {"title": app.title, "version": app.version, "description": "Fallback schema due to generation error"},
             "paths": {},
         }
-
 
 # Assign the custom generator
 app.openapi = custom_openapi  # type: ignore
