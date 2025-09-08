@@ -39,7 +39,8 @@ async def on_startup() -> None:
     """
     Application startup hook.
 
-    Initializes the database and ensures connection can be established.
+    Initializes the database (non-fatal). If the database is unavailable, the API will still start,
+    and DB-dependent routes may fail until the DB is reachable.
     """
     await init_db()
 
